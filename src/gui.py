@@ -194,6 +194,8 @@ class BalancingWorker(QThread):
             saved_figs = viz.save_all(
                 run_dir,
                 metric_results=best_report.metric_results if best_report else None,
+                manova_result=(best_report.manova_result or best_report.permutation_result) if best_report else None,
+                boxm_result=best_report.boxm_result if best_report else None,
                 prefix=self.run_id,
             )
 

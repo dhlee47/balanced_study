@@ -322,44 +322,83 @@ class Visualizer:
     def plot_stats_table(
         self,
         metric_results: list,
+        manova_result: dict | None = None,
+        boxm_result: dict | None = None,
     ) -> tuple[plt.Figure, go.Figure]:
         """
-        Readable table of corrected p-values: one row per metric.
+        Readable table of corrected p-values: one row per metric, plus
+        MANOVA and Box's M rows at the bottom.
 
-        Columns: Metric | p-value (corrected) | Test | Normality | Status
-        Status cell colour: green = PASS (p >= 0.05), red = FAIL (p < 0.05).
+        Columns: Metric | p-value | Test | Normality | Status
+        Status cell: green = PASS (p >= 0.05), red = FAIL (p < 0.05).
+        Box's M status shown in grey — supplementary, not part of overall verdict.
 
         Parameters
         ----------
         metric_results : list[MetricResult]
             From StatisticalValidator.validate().
-
-        Returns
-        -------
-        tuple[matplotlib.figure.Figure, plotly.graph_objects.Figure]
+        manova_result : dict | None
+            From ValidationReport.manova_result or permutation_result.
+        boxm_result : dict | None
+            From ValidationReport.boxm_result.
         """
-        col_headers = ["Metric", "p-value\n(Bonferroni)", "Test", "Normality", "Status"]
-        col_widths   = [0.28, 0.18, 0.20, 0.16, 0.18]
+        ALPHA = 0.05
+        col_headers = ["Metric / Test", "p-value", "Method", "Notes", "Status"]
+        col_widths   = [0.28, 0.15, 0.22, 0.19, 0.16]
 
-        rows, status_flags = [], []
+        rows, status_flags, is_supplementary = [], [], []
+
+        # Per-metric rows
         for mr in metric_results:
             norm_str = "normal" if getattr(mr, "all_normal", False) else "non-normal"
-            status   = "FAIL" if mr.significant else "PASS"
+            is_fail  = mr.significant
             rows.append([
                 mr.metric,
                 f"{mr.corrected_p_value:.4f}",
                 mr.test_used,
-                norm_str,
-                status,
+                f"Bonferroni; {norm_str}",
+                "FAIL" if is_fail else "PASS",
             ])
-            status_flags.append(mr.significant)
+            status_flags.append(is_fail)
+            is_supplementary.append(False)
+
+        # MANOVA / permutation row
+        mv = manova_result
+        if mv and "error" not in mv:
+            p_mv = mv.get("p_value", float("nan"))
+            method_mv = mv.get("method", "MANOVA")
+            is_fail_mv = isinstance(p_mv, float) and not np.isnan(p_mv) and p_mv < ALPHA
+            rows.append([
+                "MANOVA",
+                f"{p_mv:.4f}" if isinstance(p_mv, float) and not np.isnan(p_mv) else "N/A",
+                method_mv,
+                "Multivariate (all metrics)",
+                "FAIL" if is_fail_mv else "PASS",
+            ])
+            status_flags.append(is_fail_mv)
+            is_supplementary.append(False)
+
+        # Box's M row
+        bm = boxm_result
+        if bm and "error" not in bm and "skipped" not in bm.get("note", ""):
+            p_bm = bm.get("p_value", float("nan"))
+            is_fail_bm = isinstance(p_bm, float) and not np.isnan(p_bm) and p_bm < ALPHA
+            rows.append([
+                "Box's M",
+                f"{p_bm:.4f}" if isinstance(p_bm, float) and not np.isnan(p_bm) else "N/A",
+                "chi2 approx.",
+                "Covariance homogeneity*",
+                "FAIL*" if is_fail_bm else "PASS*",
+            ])
+            status_flags.append(is_fail_bm)
+            is_supplementary.append(True)
 
         n_rows = len(rows)
-        fig_h  = max(3.0, 0.55 * n_rows + 1.4)
-        fig, ax = plt.subplots(figsize=(10, fig_h))
+        fig_h  = max(3.2, 0.55 * n_rows + 1.8)
+        fig, ax = plt.subplots(figsize=(11, fig_h))
         ax.axis("off")
         ax.set_title(
-            "Statistical Validation — Corrected p-values per Metric",
+            "Statistical Validation Summary",
             fontsize=13, fontweight="bold", pad=12,
         )
 
@@ -371,62 +410,75 @@ class Visualizer:
             loc="center",
         )
         tbl.auto_set_font_size(False)
-        tbl.set_fontsize(12)
+        tbl.set_fontsize(11)
         tbl.scale(1, 2.0)
 
-        # Header row styling
+        # Header row
         for col_idx in range(len(col_headers)):
             cell = tbl[0, col_idx]
             cell.set_facecolor("#2c7bb6")
-            cell.set_text_props(color="white", fontweight="bold", fontsize=12)
+            cell.set_text_props(color="white", fontweight="bold", fontsize=11)
 
-        # Data row styling
-        for row_idx, is_fail in enumerate(status_flags, start=1):
+        # Data rows
+        for row_idx, (is_fail, is_supp) in enumerate(zip(status_flags, is_supplementary), start=1):
             for col_idx in range(len(col_headers)):
                 cell = tbl[row_idx, col_idx]
                 if col_idx == len(col_headers) - 1:  # Status column
-                    cell.set_facecolor("#d73027" if is_fail else "#1a9850")
+                    if is_supp:
+                        cell.set_facecolor("#888888")  # grey = supplementary
+                    else:
+                        cell.set_facecolor("#d73027" if is_fail else "#1a9850")
                     cell.set_text_props(color="white", fontweight="bold")
                 else:
-                    cell.set_facecolor("#fff5f5" if is_fail else "#f5fff5")
-                    cell.set_text_props(color="#222")
+                    if is_supp:
+                        cell.set_facecolor("#f5f5f5")
+                        cell.set_text_props(color="#666")
+                    else:
+                        cell.set_facecolor("#fff5f5" if is_fail else "#f5fff5")
+                        cell.set_text_props(color="#222")
                 cell.set_edgecolor("#cccccc")
 
-        fig.tight_layout()
+        if any(is_supplementary):
+            fig.text(0.5, 0.01, "* Box's M is supplementary — sensitive to non-normality, not part of PASS/FAIL verdict.",
+                     ha="center", fontsize=9, color="#555", style="italic")
 
-        # Plotly interactive version using go.Table
-        header_color  = "#2c7bb6"
-        pass_color    = "#1a9850"
-        fail_color    = "#d73027"
-        status_colors = [fail_color if f else pass_color for f in status_flags]
-        row_bg        = ["#fff5f5" if f else "#f5fff5" for f in status_flags]
+        fig.tight_layout(rect=[0, 0.04, 1, 1])
+
+        # Plotly interactive version
+        header_color = "#2c7bb6"
+        pass_color   = "#1a9850"
+        fail_color   = "#d73027"
+        supp_color   = "#888888"
+
+        status_colors = [
+            supp_color if s else (fail_color if f else pass_color)
+            for f, s in zip(status_flags, is_supplementary)
+        ]
+        row_bg = [
+            "#f5f5f5" if s else ("#fff5f5" if f else "#f5fff5")
+            for f, s in zip(status_flags, is_supplementary)
+        ]
 
         col_data = list(zip(*rows)) if rows else [[] for _ in col_headers]
         pfig = go.Figure(go.Table(
-            columnwidth=[200, 140, 160, 120, 100],
+            columnwidth=[200, 110, 170, 160, 110],
             header=dict(
-                values=[f"<b>{h.replace(chr(10), ' ')}</b>" for h in col_headers],
+                values=[f"<b>{h}</b>" for h in col_headers],
                 fill_color=header_color,
-                font=dict(color="white", size=14),
+                font=dict(color="white", size=13),
                 align="center",
                 height=36,
             ),
             cells=dict(
                 values=list(col_data),
-                fill_color=[
-                    row_bg,
-                    row_bg,
-                    row_bg,
-                    row_bg,
-                    status_colors,
-                ],
-                font=dict(color=["#222"] * 4 + ["white"], size=13),
+                fill_color=[row_bg, row_bg, row_bg, row_bg, status_colors],
+                font=dict(color=["#222"] * 4 + ["white"], size=12),
                 align="center",
                 height=32,
             ),
         ))
         pfig.update_layout(
-            title="Statistical Validation — Corrected p-values per Metric",
+            title="Statistical Validation Summary",
             margin=dict(l=20, r=20, t=60, b=20),
         )
 
@@ -440,6 +492,8 @@ class Visualizer:
         self,
         output_dir: str | Path,
         metric_results: list | None = None,
+        manova_result: dict | None = None,
+        boxm_result: dict | None = None,
         prefix: str = "",
     ) -> dict[str, Path]:
         """
@@ -451,6 +505,10 @@ class Visualizer:
             Directory to save files into.
         metric_results : list[MetricResult] | None
             Required for Figure 4.  If None, Figure 4 is skipped.
+        manova_result : dict | None
+            From ValidationReport.manova_result or permutation_result.
+        boxm_result : dict | None
+            From ValidationReport.boxm_result.
         prefix : str
             Optional string prepended to all filenames.
 
@@ -477,7 +535,10 @@ class Visualizer:
         saved["pca"]           = _save(*self.plot_pca(),           "fig3_pca")
 
         if metric_results is not None:
-            saved["stats"] = _save(*self.plot_stats_table(metric_results), "fig4_stats")
+            saved["stats"] = _save(
+                *self.plot_stats_table(metric_results, manova_result, boxm_result),
+                "fig4_stats",
+            )
 
         return saved
 
