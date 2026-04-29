@@ -44,9 +44,9 @@ conda activate balanced_study
 
 <img src="docs/img/fig3_pca.png" width="700" alt="PCA scatter coloured by group">
 
-**Statistical validation — p-value summary table**
+**Statistical validation — p-value summary table** *(per-metric ANOVA/KW with Bonferroni correction, MANOVA, and Box's M)*
 
-<img src="docs/img/fig4_stats.png" width="900" alt="Statistical p-value table">
+<img src="docs/img/fig4_stats.png" width="900" alt="Statistical p-value table with MANOVA and Box's M">
 
 ---
 
@@ -138,8 +138,9 @@ Each panel shows the mathematical operation being applied:
 | Bonferroni correction | Controls false positives across m metrics | Multiplies p-values by number of tests |
 | Box's M test *(supplementary)* | Do groups have the same covariance structure? | Are within-group correlations homogeneous? |
 
-**Interpretation:** For a well-balanced assignment, ALL p-values (after Bonferroni) should be > 0.05 — meaning "we cannot detect any significant difference between groups."  
-Box's M is reported as supplementary information only — it is sensitive to non-normality and a low p-value does not necessarily indicate poor balancing.
+**The exported figure shows all of these in one table:** per-metric rows (ANOVA or Kruskal-Wallis, Bonferroni corrected), a MANOVA row (or permutation test for small n), and a Box's M row.
+
+**Interpretation:** For a well-balanced assignment, ALL p-values (after Bonferroni) should be > 0.05 — meaning "we cannot detect any significant difference between groups." The MANOVA p-value should also be > 0.05. Box's M is supplementary — a low p-value there may reflect non-normal distributions rather than genuine covariance imbalance and does not affect the PASS/FAIL verdict.
 
 ---
 
@@ -162,7 +163,7 @@ Continuous Improvement mode reruns automatically until all tests pass.
 - **Distributions**: KDE plots to visually verify balance
 - **Covariance**: correlation structure comparison across groups
 - **PCA**: 2D scatter coloured by group (well-balanced = interleaved, not clustered)
-- **Stats Report**: full numerical output ready to copy into a methods section
+- **Stats Report**: full numerical output — per-metric p-values (Bonferroni), MANOVA, and Box's M — ready to copy into a methods section
 - **Export**: group CSVs + PDF report
 
 ---
