@@ -1,10 +1,10 @@
-# Balanced Study — Preclinical Group Balancing Toolkit
+# Balanced Study — Study Group Balancing Toolkit
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Mac%20%7C%20Linux-lightgrey)
 
-A Python desktop application for assigning laboratory animals to experimental groups in a statistically balanced way. Load your baseline measurements, choose an algorithm, and get groups where no metric differs significantly between them — with full statistical validation and publication-ready figures.
+A Python desktop application for subjects to experimental groups in a statistically balanced way. Load your baseline measurements, choose an algorithm, and get groups where no metric differs significantly between them — with full statistical validation and publication-ready figures.
 
 ---
 
