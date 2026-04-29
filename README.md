@@ -14,7 +14,7 @@ See **[INSTALL.md](INSTALL.md)** for full setup instructions (Python ≥ 3.10 re
 
 Quick start with pip:
 ```bash
-git clone https://github.com/<your-username>/balanced_study.git
+git clone https://github.com/dhlee47/balanced_study.git
 cd balanced_study
 python -m venv venv
 venv\Scripts\activate        # Windows
