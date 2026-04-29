@@ -12,8 +12,8 @@ Figure 2 — Covariance / correlation structure
 Figure 3 — PCA scatter
     PC1 vs PC2 scatter with 95% confidence ellipses per group.
 
-Figure 4 — Statistical summary heatmap
-    p-values (per metric × per pairwise group comparison), colour-coded.
+Figure 4 — Statistical summary table
+    Corrected p-values per metric, colour-coded PASS/FAIL status column.
 
 All figures saved as high-res PNG + interactive plotly HTML.
 Assumption A09: reportlab used for PDF embedding.
@@ -316,17 +316,18 @@ class Visualizer:
         return fig, pfig
 
     # ------------------------------------------------------------------
-    # Figure 4 — Statistical p-value heatmap
+    # Figure 4 — Statistical p-value table
     # ------------------------------------------------------------------
 
-    def plot_stats_heatmap(
+    def plot_stats_table(
         self,
         metric_results: list,
     ) -> tuple[plt.Figure, go.Figure]:
         """
-        Heatmap of corrected p-values: rows = metrics, columns = group pairs.
+        Readable table of corrected p-values: one row per metric.
 
-        Colour: green = not significant (p >= 0.05), red = significant (p < 0.05).
+        Columns: Metric | p-value (corrected) | Test | Normality | Status
+        Status cell colour: green = PASS (p >= 0.05), red = FAIL (p < 0.05).
 
         Parameters
         ----------
@@ -337,57 +338,96 @@ class Visualizer:
         -------
         tuple[matplotlib.figure.Figure, plotly.graph_objects.Figure]
         """
-        # Build matrix of p-values from post-hoc tests
-        pairs = set()
+        col_headers = ["Metric", "p-value\n(Bonferroni)", "Test", "Normality", "Status"]
+        col_widths   = [0.28, 0.18, 0.20, 0.16, 0.18]
+
+        rows, status_flags = [], []
         for mr in metric_results:
-            if mr.posthoc_pairs:
-                for pair in mr.posthoc_pairs:
-                    if pair != "error":
-                        pairs.add(pair)
-        pairs = sorted(pairs) or ["overall"]
+            norm_str = "normal" if getattr(mr, "all_normal", False) else "non-normal"
+            status   = "FAIL" if mr.significant else "PASS"
+            rows.append([
+                mr.metric,
+                f"{mr.corrected_p_value:.4f}",
+                mr.test_used,
+                norm_str,
+                status,
+            ])
+            status_flags.append(mr.significant)
 
-        metrics = [mr.metric for mr in metric_results]
-        matrix = np.ones((len(metrics), max(len(pairs), 1)))
-
-        for i, mr in enumerate(metric_results):
-            if mr.posthoc_pairs:
-                for j, pair in enumerate(pairs):
-                    matrix[i, j] = mr.posthoc_pairs.get(pair, mr.corrected_p_value)
-            else:
-                matrix[i, 0] = mr.corrected_p_value
-
-        fig, ax = plt.subplots(figsize=(max(6, len(pairs) * 1.5), max(4, len(metrics) * 0.8)))
-        cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
-            "pval", [(0, "#d73027"), (0.05, "#d73027"), (0.05, "#1a9850"), (1, "#1a9850")]
+        n_rows = len(rows)
+        fig_h  = max(3.0, 0.55 * n_rows + 1.4)
+        fig, ax = plt.subplots(figsize=(10, fig_h))
+        ax.axis("off")
+        ax.set_title(
+            "Statistical Validation — Corrected p-values per Metric",
+            fontsize=13, fontweight="bold", pad=12,
         )
-        im = ax.imshow(matrix, cmap=cmap, vmin=0, vmax=1, aspect="auto")
-        ax.set_xticks(range(len(pairs)))
-        ax.set_xticklabels(pairs, rotation=45, ha="right", fontsize=9)
-        ax.set_yticks(range(len(metrics)))
-        ax.set_yticklabels(metrics, fontsize=9)
-        ax.set_title("Corrected p-values by Metric & Group Pair\n(Red = significant difference)", fontsize=11)
 
-        for i in range(len(metrics)):
-            for j in range(len(pairs)):
-                ax.text(j, i, f"{matrix[i, j]:.3f}", ha="center", va="center",
-                        fontsize=8, color="white" if matrix[i, j] < 0.5 else "black")
+        tbl = ax.table(
+            cellText=rows,
+            colLabels=col_headers,
+            colWidths=col_widths,
+            cellLoc="center",
+            loc="center",
+        )
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(12)
+        tbl.scale(1, 2.0)
 
-        plt.colorbar(im, ax=ax, label="p-value")
+        # Header row styling
+        for col_idx in range(len(col_headers)):
+            cell = tbl[0, col_idx]
+            cell.set_facecolor("#2c7bb6")
+            cell.set_text_props(color="white", fontweight="bold", fontsize=12)
+
+        # Data row styling
+        for row_idx, is_fail in enumerate(status_flags, start=1):
+            for col_idx in range(len(col_headers)):
+                cell = tbl[row_idx, col_idx]
+                if col_idx == len(col_headers) - 1:  # Status column
+                    cell.set_facecolor("#d73027" if is_fail else "#1a9850")
+                    cell.set_text_props(color="white", fontweight="bold")
+                else:
+                    cell.set_facecolor("#fff5f5" if is_fail else "#f5fff5")
+                    cell.set_text_props(color="#222")
+                cell.set_edgecolor("#cccccc")
+
         fig.tight_layout()
 
-        # Plotly version
-        pfig = go.Figure(go.Heatmap(
-            z=matrix,
-            x=pairs,
-            y=metrics,
-            colorscale=[[0, "#d73027"], [0.05, "#d73027"], [0.051, "#1a9850"], [1, "#1a9850"]],
-            zmin=0, zmax=1,
-            text=np.round(matrix, 3),
-            texttemplate="%{text}",
-            colorbar=dict(title="p-value"),
+        # Plotly interactive version using go.Table
+        header_color  = "#2c7bb6"
+        pass_color    = "#1a9850"
+        fail_color    = "#d73027"
+        status_colors = [fail_color if f else pass_color for f in status_flags]
+        row_bg        = ["#fff5f5" if f else "#f5fff5" for f in status_flags]
+
+        col_data = list(zip(*rows)) if rows else [[] for _ in col_headers]
+        pfig = go.Figure(go.Table(
+            columnwidth=[200, 140, 160, 120, 100],
+            header=dict(
+                values=[f"<b>{h.replace(chr(10), ' ')}</b>" for h in col_headers],
+                fill_color=header_color,
+                font=dict(color="white", size=14),
+                align="center",
+                height=36,
+            ),
+            cells=dict(
+                values=list(col_data),
+                fill_color=[
+                    row_bg,
+                    row_bg,
+                    row_bg,
+                    row_bg,
+                    status_colors,
+                ],
+                font=dict(color=["#222"] * 4 + ["white"], size=13),
+                align="center",
+                height=32,
+            ),
         ))
         pfig.update_layout(
-            title="Statistical p-values Heatmap (Red = significant group difference)"
+            title="Statistical Validation — Corrected p-values per Metric",
+            margin=dict(l=20, r=20, t=60, b=20),
         )
 
         return fig, pfig
@@ -437,7 +477,7 @@ class Visualizer:
         saved["pca"]           = _save(*self.plot_pca(),           "fig3_pca")
 
         if metric_results is not None:
-            saved["stats"] = _save(*self.plot_stats_heatmap(metric_results), "fig4_stats")
+            saved["stats"] = _save(*self.plot_stats_table(metric_results), "fig4_stats")
 
         return saved
 

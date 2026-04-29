@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 import scikit_posthocs as sp
 from scipy import stats
-from scipy.stats import f_oneway, kruskal, shapiro
+from scipy.stats import chi2, f_oneway, kruskal, shapiro
 from statsmodels.multivariate.manova import MANOVA
 
 
@@ -61,6 +61,7 @@ class ValidationReport:
     metric_results: list[MetricResult]
     manova_result: dict[str, Any] | None
     permutation_result: dict[str, Any] | None
+    boxm_result: dict[str, Any] | None
     overall_pass: bool
     n_metrics_failed: int
     remediation: list[str] = field(default_factory=list)
@@ -171,9 +172,11 @@ class StatisticalValidator:
 
         manova_result = None
         permutation_result = None
+        boxm_result = None
 
         if use_manova:
             manova_result = self._run_manova(df, metric_cols, assignment)
+            boxm_result = self._run_boxm_test(df, metric_cols, assignment, k)
         else:
             permutation_result = self._run_permutation_test(df, metric_cols, assignment, k)
 
@@ -213,6 +216,7 @@ class StatisticalValidator:
             metric_results=metric_results,
             manova_result=manova_result,
             permutation_result=permutation_result,
+            boxm_result=boxm_result,
             overall_pass=overall_pass,
             n_metrics_failed=n_failed,
             remediation=remediation,
@@ -398,6 +402,79 @@ class StatisticalValidator:
             "passed": p_val >= self.alpha,
         }
 
+    def _run_boxm_test(
+        self,
+        df: pd.DataFrame,
+        metric_cols: list[str],
+        assignment: np.ndarray,
+        k: int,
+    ) -> dict[str, Any]:
+        """
+        Box's M test for equality of covariance matrices (chi-squared approximation).
+
+        M  = (n-k)·ln|S_p| - Σ_i (n_i-1)·ln|S_i|
+        c₁ = [Σ_i 1/(n_i-1) - 1/(n-k)] · (2m²+3m-1) / (6(m+1)(k-1))
+        χ²  = (1-c₁)·M    df = m(m+1)(k-1)/2
+
+        Note: Box's M is sensitive to non-normality.  The result is reported
+        as supplementary information and does NOT contribute to overall_pass.
+        """
+        try:
+            m = len(metric_cols)
+            n = len(df)
+            groups_data = [
+                df[metric_cols].values[assignment == g].astype(float) for g in range(k)
+            ]
+            ns = np.array([len(g) for g in groups_data], dtype=float)
+
+            # Need at least m+1 observations per group for a non-singular covariance
+            if any(ni <= m for ni in ns):
+                return {
+                    "method": "Box's M",
+                    "note": "skipped: group too small relative to number of metrics",
+                    "p_value": float("nan"),
+                }
+
+            covs = [np.cov(g, rowvar=False) for g in groups_data]
+            # Pooled within-group covariance
+            sp = sum((ni - 1) * cov for ni, cov in zip(ns, covs)) / (n - k)
+
+            sign_sp, logdet_sp = np.linalg.slogdet(sp)
+            if sign_sp <= 0:
+                raise ValueError("Pooled covariance matrix is not positive definite")
+
+            log_dets = []
+            for ni, cov in zip(ns, covs):
+                sign_i, logdet_i = np.linalg.slogdet(cov)
+                if sign_i <= 0:
+                    raise ValueError("Group covariance matrix is not positive definite")
+                log_dets.append((ni - 1) * logdet_i)
+
+            M_stat = (n - k) * logdet_sp - sum(log_dets)
+
+            c1 = (sum(1.0 / (ni - 1) for ni in ns) - 1.0 / (n - k)) * \
+                 (2.0 * m ** 2 + 3.0 * m - 1) / (6.0 * (m + 1) * (k - 1))
+
+            chi2_stat = (1.0 - c1) * M_stat
+            df_stat   = m * (m + 1) * (k - 1) / 2
+
+            p_val = float(1.0 - chi2.cdf(chi2_stat, df_stat))
+
+            return {
+                "method": "Box's M (χ² approximation)",
+                "M_statistic": round(float(M_stat), 4),
+                "chi2_statistic": round(float(chi2_stat), 4),
+                "df": int(df_stat),
+                "p_value": round(p_val, 4),
+                "note": (
+                    "Supplementary only — Box's M is sensitive to non-normality. "
+                    "p < 0.05 may reflect non-normal distributions, not true group imbalance."
+                ),
+            }
+
+        except Exception as exc:
+            return {"method": "Box's M", "error": str(exc), "p_value": float("nan")}
+
     # ------------------------------------------------------------------
     # Report formatting
     # ------------------------------------------------------------------
@@ -438,6 +515,23 @@ class StatisticalValidator:
             lines.append(
                 f"  [{status}] {r['method']}  p={r.get('p_value', 'N/A'):.4f}"
             )
+
+        if report.boxm_result:
+            r = report.boxm_result
+            lines += ["", "COVARIANCE HOMOGENEITY (supplementary):"]
+            if "error" in r:
+                lines.append(f"  Box's M ERROR: {r['error']}")
+            elif "note" in r and "skipped" in r.get("note", ""):
+                lines.append(f"  Box's M: {r['note']}")
+            else:
+                p = r.get("p_value", float("nan"))
+                chi2_v = r.get("chi2_statistic", "N/A")
+                df_v   = r.get("df", "N/A")
+                status = "PASS" if isinstance(p, float) and p >= self.alpha else "FAIL"
+                lines.append(
+                    f"  [{status}] {r['method']}  chi2={chi2_v}  df={df_v}  p={p:.4f}"
+                )
+                lines.append(f"  Note: {r.get('note', '')}")
 
         lines += ["", f"OVERALL: {'PASS ✓' if report.overall_pass else 'FAIL ✗'}"]
 

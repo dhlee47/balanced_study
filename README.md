@@ -32,13 +32,21 @@ conda activate balanced_study
 
 ## Screenshots
 
-| Distributions | PCA Scatter |
-|:---:|:---:|
-| ![Per-metric distributions by group](docs/img/fig1_distributions.png) | ![PCA scatter coloured by group](docs/img/fig3_pca.png) |
+**Per-metric distributions by group**
 
-| Correlation Structure | Statistical p-value Heatmap |
-|:---:|:---:|
-| ![Pearson correlation heatmaps](docs/img/fig2_covariance.png) | ![p-value heatmap](docs/img/fig4_stats.png) |
+<img src="docs/img/fig1_distributions.png" width="900" alt="Per-metric distributions by group">
+
+**Pearson correlation structure by group**
+
+<img src="docs/img/fig2_covariance.png" width="900" alt="Pearson correlation heatmaps">
+
+**PCA scatter — animals coloured by group**
+
+<img src="docs/img/fig3_pca.png" width="700" alt="PCA scatter coloured by group">
+
+**Statistical validation — p-value summary table**
+
+<img src="docs/img/fig4_stats.png" width="900" alt="Statistical p-value table">
 
 ---
 
@@ -97,6 +105,23 @@ animal_id, body_weight_g, blood_glucose, litter_number
 
 See [docs/algorithm_details.md](docs/algorithm_details.md) for the full technical description.
 
+### Algorithm Diagram
+
+The six panels below walk through each step, from raw measurements to balanced groups:
+
+<img src="docs/img/algorithm_diagram.png" width="950" alt="Stratified Clustering Hybrid — step-by-step diagram">
+
+Each panel shows the mathematical operation being applied:
+
+| Step | Operation | Formula / rule |
+|------|-----------|---------------|
+| 1 | Z-score normalisation | z = (x − μ) / σ |
+| 2 | PCA decorrelation | **Z**_PCA = **Z** · **V**_r |
+| 3 | k-means++ clustering | k_clust = k × 3 clusters in PCA space |
+| 4 | Serpentine initialisation | 0 → 1 → 2 → 2 → 1 → 0 → … |
+| 5 | Simulated annealing | P(accept) = exp(−ΔF / T), T decreases each iteration |
+| 6 | Objective function | F = α · D_between + β · V_within + γ · M_Mahal |
+
 ---
 
 ## Statistical Tests Explained
@@ -111,8 +136,10 @@ See [docs/algorithm_details.md](docs/algorithm_details.md) for the full technica
 | MANOVA | Do groups differ in their joint profile? | Multivariate: all metrics at once |
 | Permutation test | Same as MANOVA but for small n | Shuffle-based null distribution |
 | Bonferroni correction | Controls false positives across m metrics | Multiplies p-values by number of tests |
+| Box's M test *(supplementary)* | Do groups have the same covariance structure? | Are within-group correlations homogeneous? |
 
-**Interpretation:** For a well-balanced assignment, ALL p-values (after Bonferroni) should be > 0.05 — meaning "we cannot detect any significant difference between groups."
+**Interpretation:** For a well-balanced assignment, ALL p-values (after Bonferroni) should be > 0.05 — meaning "we cannot detect any significant difference between groups."  
+Box's M is reported as supplementary information only — it is sensitive to non-normality and a low p-value does not necessarily indicate poor balancing.
 
 ---
 
@@ -174,13 +201,13 @@ Yes — the algorithm uses a fixed random seed (default 42). The same CSV and th
 Not currently. All animals are treated equally. If some animals are more important (e.g., more expensive to produce), consider running with k+1 groups and designating one as "reserve."
 
 **Q7: How do I cite this tool in my manuscript?**
-> Animals were assigned to experimental groups using the balanced_study software (v1.0.0) with the Stratified Clustering Hybrid algorithm. Statistical validity was confirmed by one-way ANOVA/Kruskal-Wallis per metric (Shapiro-Wilk selection) with Bonferroni correction and multivariate MANOVA. All corrected p-values exceeded 0.05.
+> Animals were assigned to experimental groups using the balanced_study software (v1.0.0) with the Stratified Clustering Hybrid algorithm. Statistical validity was confirmed by one-way ANOVA/Kruskal-Wallis per metric (Shapiro-Wilk selection) with Bonferroni correction, multivariate MANOVA (Wilks' lambda), and Box's M test for covariance homogeneity. All corrected p-values exceeded 0.05.
 
 ---
 
 ## Citation-Ready Methods Paragraph
 
-> Baseline metrics were collected prior to randomisation and submitted to the balanced_study software (v1.0.0). Animals were assigned to k groups using the Stratified Clustering Hybrid algorithm: baseline metrics were z-scored, Principal Component Analysis was applied for dimensionality reduction, k-means++ clustering stratified animals in principal component space, and simulated annealing (initial temperature T₀=10.0, cooling rate c=0.995) minimised the composite objective function F = α·D_between + β·V_within + γ·M_mahal (α=β=1.0, γ=0.5), where D_between is the weighted variance of group means, V_within is the weighted mean within-group variance, and M_mahal is the mean pairwise Mahalanobis distance between group centroids. Statistical equivalence of the final assignment was verified by one-way ANOVA (normally distributed data, per Shapiro-Wilk) or Kruskal-Wallis test (non-normal data) for each metric separately, with Bonferroni correction for multiple comparisons, and by MANOVA (Wilks' lambda) across all metrics simultaneously. The null hypothesis of group equivalence was not rejected for any metric or for the multivariate test (all corrected p > 0.05).
+> Baseline metrics were collected prior to randomisation and submitted to the balanced_study software (v1.0.0). Animals were assigned to k groups using the Stratified Clustering Hybrid algorithm: baseline metrics were z-scored, Principal Component Analysis was applied for dimensionality reduction, k-means++ clustering stratified animals in principal component space, and simulated annealing (initial temperature T₀=10.0, cooling rate c=0.995) minimised the composite objective function F = α·D_between + β·V_within + γ·M_mahal (α=β=1.0, γ=0.5), where D_between is the weighted variance of group means, V_within is the weighted mean within-group variance, and M_mahal is the mean pairwise Mahalanobis distance between group centroids. Statistical equivalence of the final assignment was verified by one-way ANOVA (normally distributed data, per Shapiro-Wilk) or Kruskal-Wallis test (non-normal data) for each metric separately, with Bonferroni correction for multiple comparisons, by MANOVA (Wilks' lambda) across all metrics simultaneously, and by Box's M test (χ² approximation) for equality of group covariance matrices. The null hypothesis of group equivalence was not rejected for any metric or for the multivariate tests (all corrected p > 0.05).
 
 ---
 

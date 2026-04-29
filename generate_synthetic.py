@@ -77,7 +77,7 @@ VARIANTS = [
         ("litter_number",       lambda n: ordinal_col(n, 3)),
         ("locomotor_activity",  lambda n: normal_col(n, 1500, 300)),
         ("body_temp_C",         lambda n: normal_col(n, 37.2, 0.4)),
-        ("organ_weight_pct",    lambda n: normal_col(n, 0.7, 0.1)),
+        ("grip_strength_g",     lambda n: normal_col(n, 130, 30)),
         ("latency_s",           lambda n: skewed_col(n, 3, 15, 20)),
     ]),
     # 4: medium n, few metrics, missing 8%
@@ -103,7 +103,7 @@ VARIANTS = [
         ("open_arm_pct",        lambda n: normal_col(n, 25, 10)),
         ("locomotor_activity",  lambda n: normal_col(n, 1700, 450)),
         ("body_temp_C",         lambda n: normal_col(n, 37.1, 0.4)),
-        ("organ_weight_pct",    lambda n: normal_col(n, 0.75, 0.12)),
+        ("grip_strength_g",     lambda n: normal_col(n, 125, 28)),
     ]),
     # 7: large n, few metrics, bimodal
     dict(n=72, missing=0.0, metrics=[
@@ -126,13 +126,13 @@ VARIANTS = [
         ("litter_number",       lambda n: ordinal_col(n, 4)),
         ("locomotor_activity",  lambda n: normal_col(n, 1900, 500)),
         ("body_temp_C",         lambda n: normal_col(n, 37.1, 0.45)),
-        ("organ_weight_pct",    lambda n: normal_col(n, 0.72, 0.10)),
+        ("grip_strength_g",     lambda n: normal_col(n, 128, 32)),
         ("corticosterone_ngmL", lambda n: skewed_col(n, 4, 85, 100)),
         ("latency_s",           lambda n: normal_col(n, 55, 18)),
         ("open_arm_pct",        lambda n: bimodal_col(n, 15, 35, 5)),
         ("plasma_insulin_ngmL", lambda n: skewed_col(n, 3, 0.4, 0.5)),
-        ("adipose_mass_g",      lambda n: normal_col(n, 1.8, 0.5)),
-        ("liver_mass_g",        lambda n: normal_col(n, 1.2, 0.2)),
+        ("body_fat_pct",        lambda n: normal_col(n, 20, 4)),
+        ("rotarod_latency_s",   lambda n: normal_col(n, 100, 30)),
     ]),
 ]
 
@@ -140,13 +140,13 @@ VARIANTS = [
 DIST_NOTES = [
     "normal (all metrics)",
     "normal body_weight; skewed corticosterone, latency, open_arm",
-    "mixed: normal + ordinal + skewed",
+    "mixed: normal + ordinal + skewed; grip_strength added",
     "normal + bimodal blood_glucose; 8% NaN",
     "all normal",
-    "bimodal blood_glucose; skewed corticosterone; 12% NaN",
+    "bimodal blood_glucose; skewed corticosterone; grip_strength; 12% NaN",
     "bimodal body_weight; normal blood_glucose",
     "normal + skewed + bimodal locomotor; 6% NaN",
-    "all distributions represented; 12 metrics",
+    "all distributions represented; 12 baseline metrics",
 ]
 
 def generate_variants():
@@ -193,7 +193,7 @@ def write_manifest(paths):
     lines += [
         "",
         "## Notes",
-        "- All variants use realistic preclinical mouse values (see ASSUMPTIONS.md A08).",
+        "- All variants use realistic preclinical mouse baseline values.",
         "- Missing values are injected at random cell positions, not full rows.",
         "- Seed: 42 for reproducibility.",
     ]

@@ -61,8 +61,25 @@ When sample sizes are too small for MANOVA:
 
 ---
 
-## Box's M Test
-Tests whether the covariance matrices are equal across groups. Used as a supplementary check. Less critical for balancing but useful for detecting distributional differences not captured by means alone.
+## Box's M Test *(supplementary)*
+
+Tests whether the k group covariance matrices are equal — a stronger form of homogeneity than just comparing means or medians.
+
+**Formula (χ² approximation):**
+
+```
+M  = (n − k) · ln|S_p| − Σᵢ (nᵢ − 1) · ln|Sᵢ|
+
+c₁ = [Σᵢ 1/(nᵢ−1) − 1/(n−k)] · (2m² + 3m − 1) / (6(m+1)(k−1))
+
+χ² = (1 − c₁) · M       df = m(m+1)(k−1) / 2
+```
+
+where S_p is the pooled within-group covariance matrix, Sᵢ is the per-group covariance matrix, n is total animals, nᵢ is group i size, m is number of metrics, and k is number of groups.
+
+**Conditions for running:** n ≥ 20, each group has > m animals, m ≥ 2.
+
+**Important caveat:** Box's M is highly sensitive to departures from multivariate normality — a significant result (p < 0.05) often reflects non-normal distributions rather than genuine covariance imbalance. The result is **reported as supplementary only** and does **not** contribute to the PASS/FAIL verdict. Use it as an additional diagnostic when you suspect correlated metrics differ in their joint distribution across groups.
 
 ---
 
@@ -72,11 +89,11 @@ Tests whether the covariance matrices are equal across groups. Used as a supplem
 |---------|---------|--------|
 | All p > 0.05 (corrected) | Groups are statistically equivalent | Report as PASS; use this assignment |
 | 1 metric p < 0.05 | One metric is unbalanced | Increase that metric's weight and re-run |
-| Multiple metrics p < 0.05 | Poor overall balance | Run Algorithm 3 with more SA iterations |
+| Multiple metrics p < 0.05 | Poor overall balance | Lower SA cooling rate or enable Continuous Improvement mode |
 | MANOVA p < 0.05 | Multivariate separation detected | Enable Continuous Improvement mode |
 
 ---
 
 ## Manuscript Methods Paragraph
 
-> Animals were assigned to experimental groups using the balanced_study software (v1.0.0). Briefly, baseline metrics were z-scored and submitted to the Stratified Clustering Hybrid algorithm, which applies Principal Component Analysis for dimensionality reduction, k-means++ stratification in principal component space, and simulated annealing local optimisation of a composite objective function penalising between-group mean dispersion, within-group variance, and Mahalanobis distance between group centroids (weights α=β=1.0, γ=0.5). Statistical validity of the final assignment was confirmed by one-way ANOVA or Kruskal-Wallis test (selected based on per-group Shapiro-Wilk normality testing) for each metric, with Bonferroni correction for multiple comparisons, and multivariate MANOVA (Wilks' lambda) across all metrics simultaneously. The null hypothesis of group equivalence was not rejected for any metric (all corrected p > 0.05).
+> Animals were assigned to experimental groups using the balanced_study software (v1.0.0). Briefly, baseline metrics were z-scored and submitted to the Stratified Clustering Hybrid algorithm, which applies Principal Component Analysis for dimensionality reduction, k-means++ stratification in principal component space, and simulated annealing local optimisation of a composite objective function penalising between-group mean dispersion, within-group variance, and Mahalanobis distance between group centroids (weights α=β=1.0, γ=0.5). Statistical validity of the final assignment was confirmed by one-way ANOVA or Kruskal-Wallis test (selected based on per-group Shapiro-Wilk normality testing) for each metric, with Bonferroni correction for multiple comparisons, multivariate MANOVA (Wilks' lambda) across all metrics simultaneously, and Box's M test (χ² approximation) for equality of group covariance matrices. The null hypothesis of group equivalence was not rejected for any metric or for the multivariate tests (all corrected p > 0.05).
