@@ -384,10 +384,10 @@ class StatisticalValidator:
             perm_stats.append(between_group_dispersion(df, metric_cols, shuffled))
 
         perm_stats = np.array(perm_stats)
-        # p-value: fraction of permutations with dispersion >= observed
-        # (for a GOOD balanced solution, observed should be LOWER than null,
-        #  so p should be HIGH — we want to NOT reject the null)
-        p_val = float((perm_stats <= observed).mean())
+        # p-value: fraction of permutations with dispersion >= observed.
+        # A well-balanced solution has LOW observed dispersion, so most
+        # permuted stats >= observed → p is HIGH → we do not reject H0.
+        p_val = float((perm_stats >= observed).mean())
 
         return {
             "method": f"Permutation test (n={self.n_permutations})",

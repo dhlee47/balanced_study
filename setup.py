@@ -26,6 +26,7 @@ setup(
         "PyQt6>=6.6.0",
         "openpyxl>=3.1.0",
         "tqdm>=4.66.0",
+        "kaleido>=0.2.1",
         "reportlab>=4.0.0",
     ],
     entry_points={

@@ -8,7 +8,8 @@
 
 ### 1. Navigate to the project folder
 ```
-cd C:\Users\dhlee\balanced_study
+cd /path/to/balanced_study      # Linux / Mac
+cd C:\path\to\balanced_study    # Windows
 ```
 
 ### 2. Create the virtual environment

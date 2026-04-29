@@ -21,4 +21,3 @@ dependencies:
     - PyQt6>=6.6.0
     - kaleido>=0.2.1
     - reportlab>=4.0.0
-    - fpdf2>=2.7.0

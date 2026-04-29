@@ -237,6 +237,7 @@ class MainWindow(QMainWindow):
         self._loader: StudyDataLoader | None = None
         self._df: pd.DataFrame | None = None
         self._assignment: np.ndarray | None = None
+        self._run_dir: Path | None = None
         self._worker: BalancingWorker | None = None
         self._metric_weight_sliders: list[QSlider] = []
         self._output_dir = Path.home() / "balanced_study_outputs"
@@ -834,7 +835,6 @@ class MainWindow(QMainWindow):
             self.convergence_canvas.draw()
 
         # Populate groups table
-        k = len(np.unique(self._assignment))
         df_with_group = self._df.copy()
         df_with_group["_group_name"] = [group_names[g] for g in self._assignment]
         self.groups_table.clear()
@@ -843,8 +843,11 @@ class MainWindow(QMainWindow):
         self.groups_table.setHorizontalHeaderLabels(cols)
         self.groups_table.setRowCount(len(df_with_group))
         for r, (_, row) in enumerate(df_with_group.iterrows()):
-            for c, col in enumerate(self._loader.metric_cols):
-                vals = [str(row[self._loader.id_col])] + [str(round(row[mc], 4)) for mc in self._loader.metric_cols] + [row["_group_name"]]
+            vals = (
+                [str(row[self._loader.id_col])]
+                + [str(round(row[mc], 4)) for mc in self._loader.metric_cols]
+                + [row["_group_name"]]
+            )
             for c, val in enumerate(vals):
                 self.groups_table.setItem(r, c, QTableWidgetItem(val))
 
@@ -862,6 +865,7 @@ class MainWindow(QMainWindow):
 
         run_id = results.get("run_id", "")
         run_dir = results.get("run_dir", "")
+        self._run_dir = Path(run_dir) if run_dir else None
         self.btn_run.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.tabs.setCurrentIndex(3)
@@ -904,7 +908,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Exported", f"Saved to {out_path}")
 
     def _export_pdf(self) -> None:
-        if self._assignment is None:
+        if self._assignment is None or self._run_dir is None:
             QMessageBox.warning(self, "No Results", "Run balancing first.")
             return
         out_path, _ = QFileDialog.getSaveFileName(
@@ -913,7 +917,7 @@ class MainWindow(QMainWindow):
         if not out_path:
             return
         try:
-            _generate_pdf_report(out_path, self._output_dir)
+            _generate_pdf_report(out_path, self._run_dir)
             QMessageBox.information(self, "Exported", f"PDF saved to {out_path}")
         except Exception as exc:
             QMessageBox.critical(self, "PDF Error", str(exc))
@@ -989,7 +993,7 @@ def _generate_pdf_report(out_path: str, figures_dir: Path) -> None:
     styles = getSampleStyleSheet()
     story = [Paragraph("Balanced Study — Group Assignment Report", styles["Title"]), Spacer(1, 0.5 * cm)]
 
-    for png in sorted(figures_dir.glob("result_fig*.png")):
+    for png in sorted(figures_dir.glob("*.png")):
         story.append(Paragraph(png.stem.replace("_", " ").title(), styles["Heading2"]))
         story.append(Image(str(png), width=16 * cm, height=10 * cm))
         story.append(Spacer(1, 0.5 * cm))

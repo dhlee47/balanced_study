@@ -1,6 +1,44 @@
 # Balanced Study — Preclinical Group Balancing Toolkit
 
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Mac%20%7C%20Linux-lightgrey)
+
 A Python desktop application for assigning laboratory animals to experimental groups in a statistically balanced way. Load your baseline measurements, choose an algorithm, and get groups where no metric differs significantly between them — with full statistical validation and publication-ready figures.
+
+---
+
+## Installation
+
+See **[INSTALL.md](INSTALL.md)** for full setup instructions (Python ≥ 3.10 required).
+
+Quick start with pip:
+```bash
+git clone https://github.com/<your-username>/balanced_study.git
+cd balanced_study
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Mac/Linux
+pip install -r requirements.txt
+```
+
+Or with Conda:
+```bash
+conda env create -f environment.yml
+conda activate balanced_study
+```
+
+---
+
+## Screenshots
+
+| Distributions | PCA Scatter |
+|:---:|:---:|
+| ![Per-metric distributions by group](docs/img/fig1_distributions.png) | ![PCA scatter coloured by group](docs/img/fig3_pca.png) |
+
+| Correlation Structure | Statistical p-value Heatmap |
+|:---:|:---:|
+| ![Pearson correlation heatmaps](docs/img/fig2_covariance.png) | ![p-value heatmap](docs/img/fig4_stats.png) |
 
 ---
 
@@ -15,7 +53,7 @@ This tool solves that problem by finding an assignment of animals to groups that
 ## 5-Minute Quickstart
 
 ```bash
-# 1. Activate the virtual environment
+# 1. Activate the virtual environment (after running the install steps above)
 venv\Scripts\activate       # Windows
 # source venv/bin/activate  # Mac/Linux
 
@@ -178,7 +216,18 @@ balanced_study/
 ├── synthetic/              ← 9 synthetic test datasets + manifest
 ├── tests/                  ← pytest unit tests
 ├── docs/                   ← Detailed documentation
-├── example.csv             ← Example dataset
+├── example.csv             ← Example dataset (30 animals, 4 metrics)
+├── generate_synthetic.py   ← Script to regenerate the synthetic variants
+├── environment.yml         ← Conda environment definition
+├── requirements.txt        ← pip dependency list
 ├── ASSUMPTIONS.md          ← All design assumptions logged
-└── requirements.txt
+└── INSTALL.md              ← Step-by-step installation guide
 ```
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+This software is provided for research use. It does not constitute medical or regulatory advice.

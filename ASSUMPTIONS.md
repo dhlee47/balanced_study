@@ -66,7 +66,7 @@ All assumptions are numbered for traceability.
 
 ## A05 — Missing Data
 
-- NaN rows flagged with a warning column `_missing_flag` in the loaded DataFrame
+- NaN rows flagged with a boolean column `_had_missing` appended to the cleaned DataFrame
 - Default strategy: median imputation (robust to outliers in small samples)
 - KNN imputation uses k=5 neighbors
 
