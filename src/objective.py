@@ -67,9 +67,8 @@ def between_group_dispersion(
         std = vals.std()
         # Normalise by pooled std so high-range metrics (e.g. locomotor_activity ~1000-2500)
         # don't dominate over low-range metrics (e.g. body_weight ~18-35).
-        # Without this, the objective is ~10,000x larger for locomotor_activity, causing
-        # algorithms 2 & 3 to over-optimise for it in absolute terms while neglecting others.
-        # Algorithm 1 already z-scores internally — this makes 2 & 3 consistent. (Fix A11)
+        # Without this, the objective would be ~10,000x larger for locomotor_activity,
+        # causing the algorithm to over-optimise for it while neglecting others.
         if std < 1e-10:
             dispersions.append(0.0)
             continue

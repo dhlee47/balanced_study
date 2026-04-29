@@ -49,7 +49,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from data_loader import StudyDataLoader
-from algorithms import run_algorithm
+from algorithms import run_algorithm, stratified_clustering_hybrid
 from objective import score_solution
 from stats_validator import StatisticalValidator
 from visualizer import Visualizer
@@ -83,7 +83,6 @@ class BalancingWorker(QThread):
         df: pd.DataFrame,
         metric_cols: list[str],
         k: int,
-        algo: str,
         algo_kwargs: dict,
         alpha: float,
         beta: float,
@@ -101,7 +100,6 @@ class BalancingWorker(QThread):
         self.df = df
         self.metric_cols = metric_cols
         self.k = k
-        self.algo = algo
         self.algo_kwargs = algo_kwargs
         self.alpha = alpha
         self.beta = beta
@@ -137,7 +135,7 @@ class BalancingWorker(QThread):
 
                 self.progress_updated.emit(
                     int(100 * iteration / n_iterations),
-                    f"Iteration {iteration + 1}/{n_iterations} — running {self.algo}…",
+                    f"Iteration {iteration + 1}/{n_iterations} — running Stratified Clustering Hybrid…",
                 )
 
                 # Vary seed per iteration for diversity
@@ -146,7 +144,7 @@ class BalancingWorker(QThread):
                     kwargs["random_seed"] = 42 + iteration
 
                 assignment, score, elapsed = run_algorithm(
-                    self.algo, self.df, self.metric_cols, self.k,
+                    self.df, self.metric_cols, self.k,
                     metric_weights=self.metric_weights,
                     alpha=self.alpha, beta=self.beta, gamma=self.gamma,
                     group_sizes=self.group_sizes,
@@ -355,37 +353,34 @@ class MainWindow(QMainWindow):
         self._group_size_spins: list[QSpinBox] = []
         self._update_group_names(3)
 
-        # Algorithm selector
+        # Algorithm info
         algo_box = QGroupBox("Algorithm")
         algo_layout = QVBoxLayout()
-        self.btn_algo1 = QRadioButton("Algorithm 1 — Dynamic Allocation (fast, deterministic)")
-        self.btn_algo2 = QRadioButton("Algorithm 2 — Evolutionary (stochastic, thorough)")
-        self.btn_algo3 = QRadioButton("Algorithm 3 — Stratified Hybrid (recommended)")
-        self.btn_algo3.setChecked(True)
-        for btn in [self.btn_algo1, self.btn_algo2, self.btn_algo3]:
-            algo_layout.addWidget(btn)
+        algo_label = QLabel(
+            "Stratified Clustering Hybrid  —  PCA decorrelation → k-means++ stratification "
+            "→ simulated annealing optimisation"
+        )
+        algo_label.setWordWrap(True)
+        algo_layout.addWidget(algo_label)
         algo_box.setLayout(algo_layout)
         layout.addWidget(algo_box)
 
-        # Algorithm-specific params
+        # SA parameters
         self.algo_params_box = QGroupBox("Algorithm Parameters")
         self.algo_params_layout = QGridLayout()
         self.algo_params_box.setLayout(self.algo_params_layout)
 
-        # EA params
-        self.lbl_gen = QLabel("Generations:")
-        self.spin_gen = QSpinBox(); self.spin_gen.setRange(100, 10000); self.spin_gen.setValue(1000)
-        self.lbl_pop = QLabel("Population size:")
-        self.spin_pop = QSpinBox(); self.spin_pop.setRange(20, 500); self.spin_pop.setValue(100)
-        # SA params
         self.lbl_temp = QLabel("Initial temperature:")
-        self.spin_temp = QDoubleSpinBox(); self.spin_temp.setRange(0.1, 100.0); self.spin_temp.setValue(10.0)
+        self.spin_temp = QDoubleSpinBox()
+        self.spin_temp.setRange(0.1, 100.0)
+        self.spin_temp.setValue(10.0)
         self.lbl_cool = QLabel("Cooling rate:")
-        self.spin_cool = QDoubleSpinBox(); self.spin_cool.setRange(0.90, 0.9999); self.spin_cool.setValue(0.995); self.spin_cool.setDecimals(4)
+        self.spin_cool = QDoubleSpinBox()
+        self.spin_cool.setRange(0.90, 0.9999)
+        self.spin_cool.setValue(0.995)
+        self.spin_cool.setDecimals(4)
 
         for row, (lbl, widget) in enumerate([
-            (self.lbl_gen, self.spin_gen),
-            (self.lbl_pop, self.spin_pop),
             (self.lbl_temp, self.spin_temp),
             (self.lbl_cool, self.spin_cool),
         ]):
@@ -751,18 +746,11 @@ class MainWindow(QMainWindow):
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
 
-        algo_map = {0: "dynamic", 1: "evolutionary", 2: "hybrid"}
-        algo_idx = 0 if self.btn_algo1.isChecked() else (1 if self.btn_algo2.isChecked() else 2)
-        algo = algo_map[algo_idx]
-
-        algo_kwargs: dict = {}
-        if algo == "evolutionary":
-            algo_kwargs["generations"] = self.spin_gen.value()
-            algo_kwargs["population_size"] = self.spin_pop.value()
-        elif algo == "hybrid":
-            algo_kwargs["initial_temp"] = self.spin_temp.value()
-            algo_kwargs["cooling_rate"] = self.spin_cool.value()
-        algo_kwargs["random_seed"] = 42
+        algo_kwargs: dict = {
+            "initial_temp": self.spin_temp.value(),
+            "cooling_rate": self.spin_cool.value(),
+            "random_seed": 42,
+        }
 
         self._output_dir.mkdir(parents=True, exist_ok=True)
         group_names = [e.text() or f"Group {i}" for i, e in enumerate(self._group_name_edits)]
@@ -778,7 +766,6 @@ class MainWindow(QMainWindow):
             df=self._df,
             metric_cols=self._loader.metric_cols,
             k=self.spin_k.value(),
-            algo=algo,
             algo_kwargs=algo_kwargs,
             alpha=self.slider_alpha.value() / 10.0,
             beta=self.slider_beta.value() / 10.0,

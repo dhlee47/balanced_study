@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from algorithms import dynamic_allocation, evolutionary_algorithm, stratified_clustering_hybrid, run_algorithm
+from algorithms import stratified_clustering_hybrid, run_algorithm
 
 
 @pytest.fixture
@@ -25,56 +25,6 @@ def sample_df():
 METRIC_COLS = ["weight", "glucose", "activity"]
 
 
-class TestDynamicAllocation:
-
-    def test_returns_correct_shape(self, sample_df):
-        a = dynamic_allocation(sample_df, METRIC_COLS, k=3)
-        assert len(a) == 30
-
-    def test_all_groups_present(self, sample_df):
-        a = dynamic_allocation(sample_df, METRIC_COLS, k=3)
-        assert set(a) == {0, 1, 2}
-
-    def test_balanced_group_sizes(self, sample_df):
-        a = dynamic_allocation(sample_df, METRIC_COLS, k=3)
-        sizes = [int((a == g).sum()) for g in range(3)]
-        assert max(sizes) - min(sizes) <= 1
-
-    def test_deterministic(self, sample_df):
-        a1 = dynamic_allocation(sample_df, METRIC_COLS, k=3)
-        a2 = dynamic_allocation(sample_df, METRIC_COLS, k=3)
-        np.testing.assert_array_equal(a1, a2)
-
-    def test_k_equals_n(self, sample_df):
-        small_df = sample_df.head(5)
-        a = dynamic_allocation(small_df, METRIC_COLS[:1], k=5)
-        assert len(a) == 5
-
-
-class TestEvolutionaryAlgorithm:
-
-    def test_returns_correct_shape(self, sample_df):
-        a = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=50, population_size=20)
-        assert len(a) == 30
-
-    def test_all_groups_present(self, sample_df):
-        a = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=50, population_size=20)
-        assert set(a) == {0, 1, 2}
-
-    def test_reproducible_with_seed(self, sample_df):
-        a1 = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=50, population_size=20, random_seed=42)
-        a2 = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=50, population_size=20, random_seed=42)
-        np.testing.assert_array_equal(a1, a2)
-
-    def test_different_seeds_differ(self, sample_df):
-        a1 = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=100, population_size=20, random_seed=1)
-        a2 = evolutionary_algorithm(sample_df, METRIC_COLS, k=3, generations=100, population_size=20, random_seed=99)
-        # Not guaranteed to differ but very likely with different seeds
-        # Just check both are valid
-        assert set(a1).issubset({0, 1, 2})
-        assert set(a2).issubset({0, 1, 2})
-
-
 class TestStratifiedHybrid:
 
     def test_returns_correct_shape(self, sample_df):
@@ -85,32 +35,59 @@ class TestStratifiedHybrid:
         a = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=100)
         assert set(a) == {0, 1, 2}
 
+    def test_balanced_group_sizes(self, sample_df):
+        a = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=100)
+        sizes = [int((a == g).sum()) for g in range(3)]
+        assert max(sizes) - min(sizes) <= 1
+
     def test_reproducible_with_seed(self, sample_df):
         a1 = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=50, random_seed=42)
         a2 = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=50, random_seed=42)
         np.testing.assert_array_equal(a1, a2)
 
+    def test_different_seeds_may_differ(self, sample_df):
+        a1 = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=200, random_seed=1)
+        a2 = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3, max_sa_iter=200, random_seed=99)
+        assert set(a1).issubset({0, 1, 2})
+        assert set(a2).issubset({0, 1, 2})
+
+    def test_custom_group_sizes(self, sample_df):
+        a = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=3,
+                                         group_sizes=[12, 10, 8], max_sa_iter=50)
+        assert (a == 0).sum() == 12
+        assert (a == 1).sum() == 10
+        assert (a == 2).sum() == 8
+
+    def test_two_groups(self, sample_df):
+        a = stratified_clustering_hybrid(sample_df, METRIC_COLS, k=2, max_sa_iter=50)
+        assert set(a) == {0, 1}
+
+    def test_single_metric(self, sample_df):
+        a = stratified_clustering_hybrid(sample_df, ["weight"], k=3, max_sa_iter=50)
+        assert len(a) == 30
+
+    def test_improves_over_random(self, sample_df):
+        """Hybrid should produce a lower objective score than a random assignment."""
+        from objective import compute_objective
+        rng = np.random.default_rng(0)
+        random_assignment = rng.integers(0, 3, len(sample_df))
+        random_score = compute_objective(sample_df, METRIC_COLS, random_assignment)
+
+        _, score, _ = run_algorithm(sample_df, METRIC_COLS, k=3, max_sa_iter=500)
+        assert score <= random_score * 2
+
 
 class TestRunAlgorithm:
 
-    def test_dynamic_wrapper(self, sample_df):
-        assignment, score, elapsed = run_algorithm("dynamic", sample_df, METRIC_COLS, k=3)
+    def test_returns_correct_types(self, sample_df):
+        assignment, score, elapsed = run_algorithm(sample_df, METRIC_COLS, k=3, max_sa_iter=50)
         assert len(assignment) == 30
         assert score >= 0
         assert elapsed >= 0
 
-    def test_invalid_algo_raises(self, sample_df):
-        with pytest.raises(ValueError, match="Unknown algorithm"):
-            run_algorithm("nonexistent", sample_df, METRIC_COLS, k=3)
-
-    def test_all_algorithms_improve_over_random(self, sample_df):
-        """Each algorithm should produce a lower score than random assignment."""
-        rng = np.random.default_rng(0)
-        random_assignment = rng.integers(0, 3, len(sample_df))
-
-        from objective import compute_objective
-        random_score = compute_objective(sample_df, METRIC_COLS, random_assignment)
-
-        for algo in ["dynamic", "hybrid"]:
-            _, score, _ = run_algorithm(algo, sample_df, METRIC_COLS, k=3)
-            assert score <= random_score * 2, f"{algo} score unexpectedly high"
+    def test_score_detail_keys(self, sample_df):
+        from objective import score_solution
+        assignment, _, _ = run_algorithm(sample_df, METRIC_COLS, k=3, max_sa_iter=50)
+        result = score_solution(sample_df, METRIC_COLS, assignment)
+        for key in ("composite", "between_dispersion", "within_variance", "mahalanobis"):
+            assert key in result

@@ -62,7 +62,7 @@ python src\gui.py
 
 # 3. In the GUI:
 #    Panel 1: Browse → select your CSV → Confirm
-#    Panel 2: Set k=3 groups, Algorithm 3 (Hybrid), click Run
+#    Panel 2: Set k (number of groups) → click Run
 #    Panel 4: Review results, export group CSVs
 ```
 
@@ -79,37 +79,23 @@ animal_id, body_weight_g, blood_glucose, litter_number
 
 ---
 
-## Algorithms Explained (Plain English)
+## How It Works
 
-### Algorithm 1 — Dynamic Allocation (Serpentine)
-**Analogy: Dealing cards from a sorted deck**
+**Stratified Clustering Hybrid** — the only algorithm in this toolkit, chosen because preclinical baseline metrics are typically correlated (e.g. heavier animals tend to have higher blood glucose), and most simpler approaches fail to account for that.
 
-Sort animals from "lowest overall baseline" to "highest", then deal them out in a snake pattern: group 0 gets the 1st animal, group 1 gets the 2nd, group 2 gets the 3rd, then *back* to group 2 for the 4th, group 1 for the 5th, etc.
-
-**Result:** Each group gets animals from every part of the distribution.  
-**Speed:** Nearly instant — great for a quick first look.  
-**Limitation:** Doesn't account for correlations between metrics.
-
-### Algorithm 2 — Evolutionary Algorithm
-**Analogy: Survival of the fittest group assignments**
-
-Start with 100 random assignments. Score each one. Keep the best ones, combine pairs to produce children, randomly swap a few animals, repeat 1000 times. Return the best assignment found.
-
-**Result:** Thorough search; often finds excellent solutions.  
-**Speed:** Slower (seconds to minutes depending on n).  
-**Limitation:** Stochastic — results vary between runs unless you fix the random seed.
-
-### Algorithm 3 — Stratified Clustering Hybrid ✓ (Recommended)
 **Analogy: Sorting litter-mates across cages, then fine-tuning**
 
-1. **Decorrelate** the metrics using PCA (think: collapse "weight" and "glucose" into a single "metabolic profile" axis)
-2. **Cluster** animals in this new space so similar animals are in the same cluster
-3. **Distribute** each cluster's animals evenly across all groups (like splitting a litter across cages)
-4. **Fine-tune** by randomly swapping pairs of animals whenever it improves the score
+1. **Z-score** each metric so that high-range measurements don't swamp low-range ones
+2. **Decorrelate** with PCA — collapse correlated metrics into independent axes
+3. **Cluster** animals in PCA space so biologically similar animals are grouped together
+4. **Distribute** cluster members evenly across all k groups (serpentine initialisation)
+5. **Fine-tune** with simulated annealing — randomly swap pairs of animals, accepting swaps that improve balance and occasionally accepting worse ones to escape local minima
 
-**Result:** Best balance on correlated metrics; robust across dataset types.  
-**Speed:** Fast-to-moderate.  
-**When to use:** Default choice for most preclinical studies.
+**Result:** Groups that are balanced on both individual metrics *and* their joint biological profile.  
+**Speed:** Seconds to a few minutes depending on dataset size.  
+**Reproducibility:** Same random seed (default 42) always produces the same result.
+
+See [docs/algorithm_details.md](docs/algorithm_details.md) for the full technical description.
 
 ---
 
@@ -137,7 +123,7 @@ Load your CSV, preview the data, override column detection, choose missing-data 
 *(See [docs/gui_walkthrough.md](docs/gui_walkthrough.md) for screenshots)*
 
 ### Panel 2 — Configuration
-Set k (number of groups), group names, algorithm, hyperparameters, and importance weights.  
+Set k (number of groups), group names, algorithm hyperparameters (SA temperature and cooling rate), and importance weights.  
 The **Advanced Weights** panel lets you tell the algorithm which metrics matter most.
 
 ### Panel 3 — Run & Monitor
@@ -181,16 +167,13 @@ Use the "Missing data handling" dropdown in Panel 1. Median imputation is recomm
 **Q4: My run got FAIL on one metric — what should I do?**
 Increase that metric's importance slider (e.g., from 1.0 to 2.0) in Panel 2 → Advanced Weights, then rerun. Alternatively, enable Continuous Improvement mode.
 
-**Q5: Should I run all three algorithms and pick the best?**
-Yes — Algorithm 1 gives a fast baseline, Algorithm 3 is the default recommendation. If Algorithm 3 fails validation, try Algorithm 2 with more generations.
+**Q5: Is this reproducible? Will I get the same groups if I rerun?**
+Yes — the algorithm uses a fixed random seed (default 42). The same CSV and the same seed always produce the same result. Continuous Improvement mode deliberately varies the seed each iteration to explore different solutions.
 
-**Q6: Is this reproducible? Will I get the same groups if I rerun?**
-Algorithm 1 is always deterministic. Algorithms 2 and 3 are seeded (seed=42 by default) — same seed always produces the same result. Continuous Improvement mode changes the seed each iteration.
-
-**Q7: Can I weight some animals more than others?**
+**Q6: Can I weight some animals more than others?**
 Not currently. All animals are treated equally. If some animals are more important (e.g., more expensive to produce), consider running with k+1 groups and designating one as "reserve."
 
-**Q8: How do I cite this tool in my manuscript?**
+**Q7: How do I cite this tool in my manuscript?**
 > Animals were assigned to experimental groups using the balanced_study software (v1.0.0) with the Stratified Clustering Hybrid algorithm. Statistical validity was confirmed by one-way ANOVA/Kruskal-Wallis per metric (Shapiro-Wilk selection) with Bonferroni correction and multivariate MANOVA. All corrected p-values exceeded 0.05.
 
 ---
@@ -208,7 +191,7 @@ balanced_study/
 ├── src/                    ← Core Python modules
 │   ├── data_loader.py      ← CSV ingestion and missing-data handling
 │   ├── objective.py        ← Objective function (scoring)
-│   ├── algorithms.py       ← Three balancing algorithms
+│   ├── algorithms.py       ← Stratified Clustering Hybrid algorithm
 │   ├── stats_validator.py  ← Statistical validation engine
 │   ├── visualizer.py       ← Figure generation (matplotlib + plotly)
 │   └── gui.py              ← PyQt6 desktop application
@@ -216,11 +199,9 @@ balanced_study/
 ├── synthetic/              ← 9 synthetic test datasets + manifest
 ├── tests/                  ← pytest unit tests
 ├── docs/                   ← Detailed documentation
-├── example.csv             ← Example dataset (30 animals, 4 metrics)
 ├── generate_synthetic.py   ← Script to regenerate the synthetic variants
 ├── environment.yml         ← Conda environment definition
 ├── requirements.txt        ← pip dependency list
-├── ASSUMPTIONS.md          ← All design assumptions logged
 └── INSTALL.md              ← Step-by-step installation guide
 ```
 

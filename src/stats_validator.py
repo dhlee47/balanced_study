@@ -192,8 +192,8 @@ class StatisticalValidator:
             failed_metrics = [mr.metric for mr in metric_results if mr.significant]
             remediation.append(
                 f"Metrics with significant group differences: {failed_metrics}. "
-                "Try Algorithm 2 (evolutionary) with more generations (≥2000), "
-                "or Algorithm 3 (hybrid) with lower cooling rate (0.99)."
+                "Try a lower cooling rate (e.g. 0.99) or more SA iterations, "
+                "or enable Continuous Improvement mode."
             )
         if manova_fail:
             remediation.append(

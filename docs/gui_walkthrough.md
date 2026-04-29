@@ -34,16 +34,12 @@ Click **[Confirm Data & Proceed to Configuration →]** when ready.
 **Number of groups (k)** — How many groups to create (2–20).  
 **Group Names** — Click each box to rename groups (e.g., "Control", "Treatment A").
 
-**Algorithm selection:**
-| Option | When to use |
-|--------|-------------|
-| Algorithm 1 — Dynamic | Fast preliminary run; n > 100; need exact reproducibility |
-| Algorithm 2 — Evolutionary | Small-medium n; have time to wait; want thorough search |
-| Algorithm 3 — Hybrid ✓ | Default recommendation; handles correlated metrics |
+**Algorithm:** Stratified Clustering Hybrid — PCA decorrelation, k-means++ stratification,
+simulated annealing fine-tuning. See [algorithm_details.md](algorithm_details.md) for a full explanation.
 
 **Algorithm parameters:**
-- Generations / Population size (Algorithm 2): more → better quality, slower
-- Initial temperature / Cooling rate (Algorithm 3): lower cooling rate → slower cooling → more thorough search
+- **Initial temperature**: how freely the algorithm explores at the start (default 10.0)
+- **Cooling rate**: how quickly it narrows its search (default 0.995); lower values (e.g. 0.99) give a more thorough but slower search
 
 **Advanced Weights (click to expand):**
 - **Alpha**: how much to penalise different group *means* (default 1.0)
