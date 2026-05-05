@@ -17,8 +17,12 @@ Quick start with pip:
 git clone https://github.com/dhlee47/balanced_study.git
 cd balanced_study
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Mac/Linux
+
+# Activate the virtual environment — run the line that matches your OS:
+venv\Scripts\activate.bat    # Windows Command Prompt
+venv\Scripts\Activate.ps1    # Windows PowerShell  (see INSTALL.md if this errors)
+source venv/bin/activate      # Mac / Linux
+
 pip install -r requirements.txt
 ```
 
@@ -62,11 +66,13 @@ This tool solves that problem by finding an assignment of animals to groups that
 
 ```bash
 # 1. Activate the virtual environment (after running the install steps above)
-venv\Scripts\activate       # Windows
-# source venv/bin/activate  # Mac/Linux
+venv\Scripts\activate.bat   # Windows Command Prompt
+venv\Scripts\Activate.ps1   # Windows PowerShell
+source venv/bin/activate     # Mac / Linux
 
 # 2. Launch the GUI
-python src\gui.py
+python src\gui.py            # Windows
+python src/gui.py            # Mac / Linux
 
 # 3. In the GUI:
 #    Panel 1: Browse → select your CSV → Confirm

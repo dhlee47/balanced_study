@@ -60,6 +60,14 @@ source venv/bin/activate
 
 After activation you will see `(venv)` at the start of your command prompt. That means it worked.
 
+> **Windows PowerShell note:** If `Activate.ps1` fails with *"cannot be loaded because running scripts
+> is disabled on this system"*, run this once to allow local scripts, then retry the activate command:
+> ```
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+> Alternatively, just use **Command Prompt** (`cmd`) instead of PowerShell — `activate.bat` works
+> without any policy changes.
+
 ### 5. Install dependencies
 
 ```
