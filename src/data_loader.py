@@ -103,6 +103,16 @@ class StudyDataLoader:
             raise FileNotFoundError(f"CSV not found: {self.filepath}")
 
         self.raw_df = pd.read_csv(self.filepath)
+
+        # Silently drop rows where every value is NaN (completely empty rows)
+        n_before = len(self.raw_df)
+        self.raw_df = self.raw_df.dropna(how="all").reset_index(drop=True)
+        n_empty = n_before - len(self.raw_df)
+        if n_empty:
+            self.warnings.append(
+                f"Dropped {n_empty} completely empty row(s) from input CSV."
+            )
+
         self.id_col, self.metric_cols = self.detect_columns()
         self._missing_mask = self.raw_df[self.metric_cols].isna()
         self._validate()
@@ -255,8 +265,11 @@ class StudyDataLoader:
                 "Choose from: 'exclude', 'mean', 'median', 'knn'."
             )
 
-        # Add a flag column to track which rows had imputed values
-        df["_had_missing"] = self._missing_mask.any(axis=1).values
+        # Add a flag column: excluded rows are gone; imputed rows carry a True flag
+        if strategy == "exclude":
+            df["_had_missing"] = False
+        else:
+            df["_had_missing"] = self._missing_mask.any(axis=1).values
 
         self.df = df
         return self.df

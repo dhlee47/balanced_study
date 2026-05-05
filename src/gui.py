@@ -236,6 +236,7 @@ class MainWindow(QMainWindow):
 
         self._loader: StudyDataLoader | None = None
         self._df: pd.DataFrame | None = None
+        self._working_df: pd.DataFrame | None = None
         self._assignment: np.ndarray | None = None
         self._run_dir: Path | None = None
         self._worker: BalancingWorker | None = None
@@ -341,6 +342,16 @@ class MainWindow(QMainWindow):
         k_row.addStretch()
         layout.addLayout(k_row)
 
+        # Create spin_n_discard early so _effective_n() is safe inside _update_group_names
+        self.spin_n_discard = QSpinBox()
+        self.spin_n_discard.setRange(0, 0)
+        self.spin_n_discard.setValue(0)
+        self.spin_n_discard.setToolTip(
+            "Remove the N subjects with the largest Mahalanobis distance before "
+            "group assignment.  Adjust group sizes to match the reduced total."
+        )
+        self.spin_n_discard.valueChanged.connect(self._update_size_total)
+
         # Group names + sizes
         self.group_names_box = QGroupBox("Group Names & Sizes")
         gn_outer = QVBoxLayout()
@@ -354,6 +365,15 @@ class MainWindow(QMainWindow):
         self._group_name_edits: list[QLineEdit] = []
         self._group_size_spins: list[QSpinBox] = []
         self._update_group_names(3)
+
+        # Outlier removal
+        outlier_box = QGroupBox("Outlier Removal")
+        outlier_layout = QHBoxLayout()
+        outlier_layout.addWidget(QLabel("Discard N worst outliers (Mahalanobis distance):"))
+        outlier_layout.addWidget(self.spin_n_discard)
+        outlier_layout.addStretch()
+        outlier_box.setLayout(outlier_layout)
+        layout.addWidget(outlier_box)
 
         # Algorithm info
         algo_box = QGroupBox("Algorithm")
@@ -600,6 +620,10 @@ class MainWindow(QMainWindow):
         else:
             self.warnings_box.setText("No warnings.")
 
+        # Reset outlier spinner range to match new dataset
+        self.spin_n_discard.setRange(0, max(0, len(self._df) - 1))
+        self.spin_n_discard.setValue(0)
+
         # Refresh group size spinbox defaults and limits to match new n
         self._update_group_names(self.spin_k.value())
 
@@ -608,6 +632,7 @@ class MainWindow(QMainWindow):
 
         # Reset any previous run results so Panel 4 doesn't show stale data
         self._assignment = None
+        self._working_df = None
         self.groups_table.clearContents()
         self.groups_table.setRowCount(0)
         self.groups_table.setColumnCount(0)
@@ -634,6 +659,12 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(1)
         self.status_bar.showMessage("Data confirmed. Configure and run balancing.")
 
+    def _effective_n(self) -> int:
+        """Animals remaining after planned outlier discards."""
+        n = len(self._df) if self._df is not None else 0
+        spin = getattr(self, "spin_n_discard", None)
+        return max(0, n - (spin.value() if spin is not None else 0))
+
     def _update_group_names(self, k: int) -> None:
         # Clear old widgets
         for edit in self._group_name_edits:
@@ -650,7 +681,7 @@ class MainWindow(QMainWindow):
         self._group_name_edits.clear()
         self._group_size_spins.clear()
 
-        n = len(self._df) if self._df is not None else 0
+        n = self._effective_n()
         base, extra = divmod(n, k) if n > 0 else (0, 0)
 
         for g in range(k):
@@ -683,7 +714,7 @@ class MainWindow(QMainWindow):
 
     def _update_size_total(self) -> None:
         """Refresh the total-vs-n label; highlight red if mismatch."""
-        n = len(self._df) if self._df is not None else 0
+        n = self._effective_n()
         total = sum(s.value() for s in self._group_size_spins)
         self._size_total_label.setText(f"Total: {total} / {n}")
         ok = (total == n) or (n == 0)
@@ -696,7 +727,7 @@ class MainWindow(QMainWindow):
         if not self._group_size_spins or self._df is None:
             return None
         sizes = [s.value() for s in self._group_size_spins]
-        n = len(self._df)
+        n = self._effective_n()
         k = self.spin_k.value()
         # Check if it's just the default equal split
         base, extra = divmod(n, k)
@@ -732,17 +763,29 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Load and confirm a CSV first.")
             return
 
-        # Validate group sizes before starting
+        # Compute working df after outlier removal (before UI changes so we can error-out cleanly)
+        n_discard = self.spin_n_discard.value()
+        if n_discard > 0:
+            working_df, discarded_ids = _discard_outliers(
+                self._df, self._loader.metric_cols, self._loader.id_col, n_discard
+            )
+        else:
+            working_df = self._df
+            discarded_ids = []
+
+        # Validate group sizes against the post-discard count
         group_sizes = self._get_group_sizes()
         if group_sizes is not None:
-            if sum(group_sizes) != len(self._df):
+            if sum(group_sizes) != len(working_df):
                 QMessageBox.warning(
                     self, "Size Mismatch",
-                    f"Group sizes sum to {sum(group_sizes)} but the dataset has "
-                    f"{len(self._df)} animals. Adjust sizes so they sum to {len(self._df)}."
+                    f"Group sizes sum to {sum(group_sizes)} but {len(working_df)} subjects "
+                    f"remain after discarding {n_discard} outlier(s). "
+                    f"Adjust sizes to sum to {len(working_df)}."
                 )
                 return
 
+        self._working_df = working_df
         self.log_box.clear()
         self.progress_bar.setValue(0)
         self.btn_run.setEnabled(False)
@@ -758,6 +801,10 @@ class MainWindow(QMainWindow):
         group_names = [e.text() or f"Group {i}" for i, e in enumerate(self._group_name_edits)]
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_box.append(f"Run ID: {run_id}")
+        if discarded_ids:
+            self.log_box.append(
+                f"Discarded {n_discard} Mahalanobis outlier(s): {discarded_ids}"
+            )
 
         # Clean up previous worker before creating a new one
         if self._worker is not None:
@@ -765,7 +812,7 @@ class MainWindow(QMainWindow):
             self._worker = None
 
         self._worker = BalancingWorker(
-            df=self._df,
+            df=working_df,
             metric_cols=self._loader.metric_cols,
             k=self.spin_k.value(),
             algo_kwargs=algo_kwargs,
@@ -824,7 +871,7 @@ class MainWindow(QMainWindow):
             self.convergence_canvas.draw()
 
         # Populate groups table
-        df_with_group = self._df.copy()
+        df_with_group = (self._working_df if self._working_df is not None else self._df).copy()
         df_with_group["_group_name"] = [group_names[g] for g in self._assignment]
         self.groups_table.clear()
         cols = [self._loader.id_col] + self._loader.metric_cols + ["Group"]
@@ -886,7 +933,7 @@ class MainWindow(QMainWindow):
         )
         if not out_path:
             return
-        out_df = self._df.copy()
+        out_df = (self._working_df if self._working_df is not None else self._df).copy()
         group_labels = [
             (self._group_name_edits[g].text() or f"Group {g}")
             for g in self._assignment
@@ -993,6 +1040,37 @@ def _generate_pdf_report(out_path: str, figures_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _discard_outliers(
+    df: pd.DataFrame,
+    metric_cols: list[str],
+    id_col: str,
+    n: int,
+) -> tuple[pd.DataFrame, list]:
+    """
+    Remove the n rows with the highest Mahalanobis distance from df.
+
+    Returns (filtered_df, list_of_discarded_ids).
+    Uses the pseudo-inverse when the covariance matrix is singular.
+    """
+    X = df[metric_cols].values.astype(float)
+    mean = X.mean(axis=0)
+    cov = np.cov(X, rowvar=False)
+    if cov.ndim < 2:
+        cov = np.atleast_2d(cov)
+    try:
+        inv_cov = np.linalg.inv(cov)
+    except np.linalg.LinAlgError:
+        inv_cov = np.linalg.pinv(cov)
+    diff = X - mean
+    d2 = np.einsum("ij,jk,ik->i", diff, inv_cov, diff)
+    distances = np.sqrt(np.maximum(d2, 0.0))
+    worst_idx = np.argsort(distances)[::-1][:n]
+    mask = np.ones(len(df), dtype=bool)
+    mask[worst_idx] = False
+    discarded_ids = df.iloc[worst_idx][id_col].tolist()
+    return df.iloc[mask].reset_index(drop=True), discarded_ids
+
 
 def _make_slider(min_val: int, max_val: int, default: int) -> QSlider:
     """Create a horizontal QSlider."""
