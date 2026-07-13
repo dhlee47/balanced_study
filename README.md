@@ -23,7 +23,7 @@ venv\Scripts\activate.bat    # Windows Command Prompt
 venv\Scripts\Activate.ps1    # Windows PowerShell  (see INSTALL.md if this errors)
 source venv/bin/activate      # Mac / Linux
 
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Or with Conda:
